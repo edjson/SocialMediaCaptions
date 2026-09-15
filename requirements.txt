@@ -1,0 +1,9 @@
+torch
+torchvision
+transformers>=4.57
+accelerate
+qwen-vl-utils
+huggingface_hub
+pillow
+requests
+python-dotenv
