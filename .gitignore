@@ -3,6 +3,7 @@
 .env.local
 *.env
 
+gradio_tmp/
 
 venv/
 __pycache__/
