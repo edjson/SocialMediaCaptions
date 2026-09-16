@@ -4,9 +4,24 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 
 MODEL_ID = "Qwen/Qwen3-VL-4B-Instruct"
 MAX_NEW_TOKENS = 1024
+MAX_SIDE = 1024
+
 
 _processor = None
 _model = None
+
+class TokenCounter:
+    def __init__(self, on_token):
+        self.on_token = on_token
+        self.count = -1  # generate() passes the prompt in first; skip it
+
+    def put(self, value):
+        self.count += 1
+        if self.count > 0:
+            self.on_token(self.count)
+
+    def end(self):
+        pass
 
 
 def _load():
@@ -19,7 +34,7 @@ def _load():
     return _processor, _model
 
 
-def generate(image, prompt, max_new_tokens=128):
+def generate(image, prompt, max_new_tokens=128, on_token=None):
     """image: PIL.Image or path. Returns (reply_text, prompt_token_count)."""
     processor, model = _load()
     if not isinstance(image, Image.Image):
@@ -35,7 +50,12 @@ def generate(image, prompt, max_new_tokens=128):
     inputs = processor(text=[text], images=[image], return_tensors="pt").to(model.device)
 
     with torch.inference_mode():
-        out = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            streamer=TokenCounter(on_token) if on_token else None,
+            )
 
     n_prompt = inputs.input_ids.shape[1]
     reply = processor.decode(out[0][n_prompt:], skip_special_tokens=True).strip()

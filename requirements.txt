@@ -1,5 +1,4 @@
-# check your torch version
-torch==2.8.0+cu128
+torch
 torchvision
 transformers>=4.57
 accelerate
@@ -7,5 +6,5 @@ qwen-vl-utils
 huggingface_hub
 pillow
 requests
-python-doten
+python-dotenv
 gradio

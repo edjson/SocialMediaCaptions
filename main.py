@@ -12,10 +12,10 @@ def start_generate(image):
 
 def generate_caption(image, story, progress=gr.Progress()):
     progress(0, desc="Reading image")
-    caption = generate(
-        image,
-        f"write an Instagram caption for this photo. Context: {story}",
-        on_token=lambda n: progress((n, MAX_NEW_TOKENS), desc="Writing caption", unit="tokens"),
+    caption, _ = generate(
+        image, 
+        f"write an Instagram caption for this photo. Context:{story}",
+        on_token=lambda n: progress((n, MAX_NEW_TOKENS), desc="writinng caption", unit ="tokens"),
     )
     return caption, gr.Column(visible=False), gr.Column(visible=True)
 
@@ -60,4 +60,4 @@ with gr.Blocks(title="Caption Bridge") as demo:
     back.click(go_back, outputs=[upload_page, edit_page])
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.queue().launch()
