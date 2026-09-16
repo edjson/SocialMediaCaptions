@@ -55,3 +55,5 @@ def search_topics(query, vertical=None, limit=10):
         body["vertical"] = vertical
     data = _request("POST", "/v1/topics/breakout/search", json=body)
     return data.get("topics", [])
+
+

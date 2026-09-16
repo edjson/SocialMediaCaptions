@@ -1,8 +1,9 @@
 import os
+
 os.environ["GRADIO_TEMP_DIR"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gradio_tmp")
 import gradio as gr
 
-from vlm.qwen import run_vlm, MAX_NEW_TOKENS
+from vlm.model import generate, MAX_NEW_TOKENS
 
 def start_generate(image):
     if image is None:
@@ -11,7 +12,7 @@ def start_generate(image):
 
 def generate_caption(image, story, progress=gr.Progress()):
     progress(0, desc="Reading image")
-    caption = run_vlm(
+    caption = generate(
         image,
         f"write an Instagram caption for this photo. Context: {story}",
         on_token=lambda n: progress((n, MAX_NEW_TOKENS), desc="Writing caption", unit="tokens"),
