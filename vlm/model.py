@@ -34,7 +34,7 @@ def _load():
     return _processor, _model
 
 
-def generate(image, prompt, max_new_tokens=128, on_token=None):
+def generate(image, prompt, max_new_tokens=128, on_token=None, temperature=0.0):
     """image: PIL.Image or path. Returns (reply_text, prompt_token_count)."""
     processor, model = _load()
     if not isinstance(image, Image.Image):
@@ -49,13 +49,21 @@ def generate(image, prompt, max_new_tokens=128, on_token=None):
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = processor(text=[text], images=[image], return_tensors="pt").to(model.device)
 
+    # Greedy for classify/judge, where the answer should be repeatable.
+    # Sampled for captions, where greedy picks the blandest phrasing every time.
+    if temperature > 0:
+        sampling = {"do_sample": True, "temperature": temperature, "top_p": 0.9}
+    else:
+        sampling = {"do_sample": False}
+
     with torch.inference_mode():
         out = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False,
             streamer=TokenCounter(on_token) if on_token else None,
-            )
+            **sampling,
+        )
+
 
     n_prompt = inputs.input_ids.shape[1]
     reply = processor.decode(out[0][n_prompt:], skip_special_tokens=True).strip()
