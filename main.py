@@ -3,21 +3,42 @@ import os
 os.environ["GRADIO_TEMP_DIR"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gradio_tmp")
 import gradio as gr
 
-from vlm.model import generate, MAX_NEW_TOKENS
+from vlm.model import generate
+from pipeline import classify, retrieve, gate, judge, title_of, build_prompt, CAPTION_TOKENS
+from upriver.upriver import VERTICALS
+
 
 def start_generate(image):
     if image is None:
         raise gr.Error("Please give an image")
     return gr.Textbox(interactive=False), gr.Button(visible=False), gr.HTML(visible=True)
 
-def generate_caption(image, story, progress=gr.Progress()):
+def generate_caption(image, story, vertical, progress=gr.Progress()):
     progress(0, desc="Reading image")
+    query = classify(image)
+
+    progress(0, desc=f"Checking trends for \u201c{query}\u201d")
+    candidates = gate(retrieve(query, vertical=vertical or None))
+
+    progress(0, desc="Checking trend relevance")
+    topics = judge(image, candidates)
+
+    if topics:
+        note = "**Trends used:** " + ", ".join(title_of(t) for t in topics)
+    elif candidates:
+        note = f"{len(candidates)} trends found for \u201c{query}\u201d, none fit the photo \u2014 plain caption."
+    else:
+        note = f"No trend fit \u201c{query}\u201d \u2014 wrote a plain caption."
+
+
     caption, _ = generate(
-        image, 
-        f"write an Instagram caption for this photo. Context:{story}",
-        on_token=lambda n: progress((n, MAX_NEW_TOKENS), desc="writinng caption", unit ="tokens"),
+        image,
+        build_prompt(story, topics),
+        max_new_tokens=CAPTION_TOKENS,
+        on_token=lambda n: progress((n, CAPTION_TOKENS), desc="writing caption", unit="tokens"),
     )
-    return caption, gr.Column(visible=False), gr.Column(visible=True)
+    return caption, note, gr.Column(visible=False), gr.Column(visible=True)
+
 
 def finish_generate():
     return gr.Textbox(interactive=True), gr.Button(visible=True), gr.HTML(visible=False)
@@ -36,12 +57,19 @@ with gr.Blocks(title="Caption Bridge") as demo:
                 placeholder="What's the story behind this post?",
                 lines=3,
             )
+            vertical_in = gr.Dropdown(
+                choices=[("Auto", "")] + [(v.title(), v) for v in VERTICALS],
+                value="",
+                label="Vertical",
+            )
             go = gr.Button("Generate", variant="primary")
             progress_box = gr.HTML(visible=False, min_height=60)
 
         with gr.Column(visible=False) as edit_page:
             caption_out = gr.Textbox(label="Caption", lines=8, interactive=True)
+            trend_note = gr.Markdown()
             back = gr.Button("Back")
+
     go.click(
         start_generate,
         inputs=image_in,
@@ -49,8 +77,8 @@ with gr.Blocks(title="Caption Bridge") as demo:
         show_progress="hidden",
     ).success(
         generate_caption,
-        inputs=[image_in, story_in],
-        outputs=[caption_out, upload_page, edit_page],
+        inputs=[image_in, story_in, vertical_in],
+        outputs=[caption_out, trend_note, upload_page, edit_page],
         show_progress_on=progress_box,
     ).then(
         finish_generate,
