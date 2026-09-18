@@ -43,7 +43,7 @@ def get_categories(refresh=False):
     CATEGORIES_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return data
 
-VERTICALS = ("tech", "sports", "politics")
+VERTICALS = ("tech", "sports", "politics", "creative")
 
 
 def search_topics(query, vertical=None, limit=10):
