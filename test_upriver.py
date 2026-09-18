@@ -157,10 +157,22 @@ def check_schema(subjects):
     scored = sum(1 for t in sample if pipeline.score_of(t) > 0)
     momentum = sum(1 for t in sample if pipeline.momentum_of(t) > 0)
     print()
-    (ok if titled == len(sample) else bad)(
-        f"pipeline.title_of()    resolves {titled}/{len(sample)}")
-    (ok if scored else bad)(
-        f"pipeline.score_of()    non-zero {scored}/{len(sample)}")
+    if titled == len(sample):
+        ok(f"pipeline.title_of()    resolves {titled}/{len(sample)}")
+    else:
+        bad(f"pipeline.title_of()    resolves only {titled}/{len(sample)} "
+            f"- gate() drops every topic it cannot title")
+
+    # Some topics legitimately carry score 0 (58/61 in an earlier sample), so
+    # only a total absence means the field was renamed upstream.
+    if scored == len(sample):
+        ok(f"pipeline.score_of()    non-zero on all {scored}")
+    elif scored:
+        warn(f"pipeline.score_of()    non-zero on only {scored}/{len(sample)} "
+             f"- topics without a score can never pass gate()")
+    else:
+        bad("pipeline.score_of()    non-zero on 0 topics - 'score' was likely "
+            "renamed upstream; gate() can never fire")
     print(f"  [--]   pipeline.momentum_of() non-zero {momentum}/{len(sample)} "
           f"(sparse upstream; not safe to filter on)")
 
