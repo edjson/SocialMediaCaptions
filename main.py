@@ -5,9 +5,10 @@ import gradio as gr
 
 from vlm.model import generate
 from pipeline import (
-    classify, retrieve, gate, judge, title_of, keywords_of,
-    build_prompt, strip_hashtags, CAPTION_TOKENS,
+    describe, build_query, retrieve, gate, judge, title_of, keywords_of,
+    build_prompt, clean_caption, debug_note, CAPTION_TOKENS,
 )
+
 
 from upriver.upriver import VERTICALS
 
@@ -19,13 +20,16 @@ def start_generate(image):
 
 def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
     progress(0, desc="Reading image")
-    query = classify(image)
+    description = describe(image)
+    query = build_query(description, story)
 
-    progress(0, desc=f"Checking trends for \u201c{query}\u201d")
-    candidates = gate(retrieve(query, vertical=vertical or None))
+    progress(0, desc="Checking trends")
+    raw = retrieve(query, vertical=vertical or None)
+    candidates = gate(raw)
 
     progress(0, desc="Checking trend relevance")
-    topics = judge(image, candidates)
+    topics, verdict = judge(image, candidates)
+
 
     if topics:
         note = "**Trends used:** " + ", ".join(title_of(t) for t in topics)
@@ -34,9 +38,10 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
             note += "  \n**Keywords offered:** " + ", ".join(keywords)
 
     elif candidates:
-        note = f"{len(candidates)} trends found for \u201c{query}\u201d, none fit the photo \u2014 plain caption."
+        note = f"{len(candidates)} trends found, none fit the photo \u2014 plain caption."
     else:
-        note = f"No trend fit \u201c{query}\u201d \u2014 wrote a plain caption."
+        note = f"No trend fit \u201c{query[:60]}\u2026\u201d \u2014 wrote a plain caption."
+    note += "\n\n" + debug_note(query, raw, candidates, topics, verdict)
 
 
     caption, _ = generate(
@@ -47,8 +52,7 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
 
         on_token=lambda n: progress((n, CAPTION_TOKENS), desc="writing caption", unit="tokens"),
     )
-    return strip_hashtags(caption), note, gr.Column(visible=False), gr.Column(visible=True)
-
+    return clean_caption(caption), note, gr.Column(visible=False), gr.Column(visible=True)
 
 
 def finish_generate():

@@ -46,11 +46,14 @@ def get_categories(refresh=False):
 VERTICALS = ("tech", "sports", "politics", "creative")
 
 
-def search_topics(query, vertical=None, limit=10):
+def search_topics(query, vertical=None, limit=10, mode="vector"):
     """Breakout topics matching free text. Returns a list of topic dicts."""
     if vertical is not None and vertical not in VERTICALS:
         raise ValueError(f"vertical must be one of {VERTICALS} or None, got {vertical!r}")
-    body = {"query": query, "limit": limit, "include": ["citations", "entities"]}
+    # vector beats the "hybrid" default on descriptive queries; "keyword"
+    # returns nothing at all.
+    body = {"query": query, "limit": limit, "mode": mode,
+            "include": ["citations", "entities"]}
     if vertical:
         body["vertical"] = vertical
     data = _request("POST", "/v1/topics/breakout/search", json=body)
