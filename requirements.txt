@@ -4,6 +4,7 @@
 #
 # Also needs a .env with UPRIVER_API_KEY - config.py raises KeyError without it.
 torch==2.11.0
+torchvision==0.26.0
 transformers==5.17.0
 accelerate==1.15.0      # needed by device_map="cuda"; not imported directly
 pillow==12.3.0
