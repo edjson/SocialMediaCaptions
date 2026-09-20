@@ -34,7 +34,7 @@ def judge(image, topics):
     picked = {int(n) for n in re.findall(r"\d+", verdict) if 1 <= int(n) <= len(topics)}
     return [t for i, t in enumerate(topics, 1) if i in picked], verdict
 
-QUERY_TOKENS = 80   # a sentence or two of description, not a short query
+QUERY_TOKENS = 56   # a sentence or two of description, not a short query
 CAPTION_TOKENS = 220
 
 DESCRIBE_PROMPT = (
@@ -146,6 +146,22 @@ def retrieve(query, vertical=None, limit=12):
         return []
 
 
+def retrieve_many(queries, vertical=None, limit=12):
+    """Search each query, merge by topic_id keeping the best score.
+
+    A ~60 word photo description drowns a short story in one vector query:
+    "lets build a data center" alone returns four on-topic data-centre trends,
+    but appended to a description it returns "Midjourney vs Krea AI".
+    """
+    merged = {}
+    for q in queries:
+        for t in retrieve(q, vertical=vertical, limit=limit):
+            tid = t.get("topic_id")
+            if tid not in merged or score_of(t) > score_of(merged[tid]):
+                merged[tid] = t
+    return list(merged.values())
+
+
 def gate(topics, min_score=0.10, keep=5):
     """Cheap junk filter. Relevance is judge()'s job, not this one's.
 
@@ -156,7 +172,7 @@ def gate(topics, min_score=0.10, keep=5):
     sees citation snippets. Momentum and status are not filtered on: momentum
     is missing on ~60% of topics and 87% of the corpus is "declining".
     """
-    
+
     kept = [t for t in topics if title_of(t) and score_of(t) >= min_score]
     kept.sort(key=score_of, reverse=True)
     return kept[:keep]
@@ -165,9 +181,9 @@ def gate(topics, min_score=0.10, keep=5):
 
 CAPTION_PROMPT = (
     "Write one Instagram caption for this photo.\n"
-    "What the person says about the moment is the subject of the caption; "
-    "the photo is the setting for it. Any trending subjects listed below are "
-    "optional colour, not the point.\n"
+    "Never hand back the person's own words unchanged. Whatever they say is "
+    "raw material; the caption has to add something only this photo gives "
+    "you.\n"
     "Aim for one or two sentences that sound like a person talking to "
     "friends, not a brand.\n"
     "Plain punctuation: no em dashes, no emoji, no hashtags. Skip stock "
@@ -183,7 +199,9 @@ def voice_examples(voice, limit=6):
 
 def build_prompt(story, topics, voice=""):
     parts = [CAPTION_PROMPT]
-    examples = voice_examples(voice)
+    examples = [e for e in voice_examples(voice)
+                if e.strip().lower() != (story or "").strip().lower()]
+
 
     if examples:
         listed = "\n".join(f"- {e}" for e in examples)
@@ -267,3 +285,25 @@ def clean_caption(caption):
     if len(text) >= 2 and text[0] in '"\u201c' and text[-1] in '"\u201d':
         text = text[1:-1].strip()                              # unwrap quoted output
     return text
+
+
+ECHO_RETRY = (
+    "\n\nYour previous attempt returned the person's words unchanged. That is "
+    "not a caption. Write a different one that adds something visible in the "
+    "photo itself."
+)
+
+
+def is_echo(caption, story):
+
+    """True when the model handed the story back with nothing added.
+
+    Runs 4 and 5 of the log produced byte-identical captions from identical
+    inputs at temperature 0.8, so this is mode collapse rather than sampling
+    noise - a retry only helps if it also raises the temperature.
+
+    Exact match only: no false positives, at the cost of missing near-copies
+    like a trailing "!". A fuzzy threshold would be a guess at this sample size.
+    """
+    story = (story or "").strip().lower()
+    return bool(story) and (caption or "").strip().lower() == story

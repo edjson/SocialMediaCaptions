@@ -8,8 +8,9 @@ from inspect import signature
 
 from vlm.model import generate, MODEL_ID
 from pipeline import (
-    describe, build_query, retrieve, gate, judge, title_of, keywords_of,
-    score_of, build_prompt, clean_caption, debug_note, CAPTION_TOKENS,
+    describe, build_query, retrieve, retrieve_many, gate, judge, title_of, keywords_of,
+    score_of, build_prompt, clean_caption, is_echo, debug_note,
+    ECHO_RETRY, CAPTION_TOKENS,
 )
 import runlog
 
@@ -51,7 +52,8 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
 
     progress(0, desc="Checking trends")
     started = time.perf_counter()
-    raw = retrieve(query, vertical=vertical or None)
+    queries = [q for q in (query, story.strip()) if q]
+    raw = retrieve_many(queries, vertical=vertical or None)
     candidates = gate(raw)
     t_retrieve = time.perf_counter() - started
 
@@ -60,7 +62,7 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
     topics, verdict = judge(image, candidates)
     t_judge = time.perf_counter() - started
 
-    keywords = [k for topic in topics for k in keywords_of(topic)]
+    keywords = list(dict.fromkeys(k for topic in topics for k in keywords_of(topic)))
     if topics:
         note = "**Trends used:** " + ", ".join(title_of(t) for t in topics)
         if keywords:
@@ -83,6 +85,22 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
     t_caption = time.perf_counter() - started
     cleaned = clean_caption(caption)
 
+    # A prompt rule the model can ignore needs a guarantee in code, the same
+    # reason clean_caption exists. Temperature goes up, not back to 0.8: the
+    # echo is mode collapse, so retrying at the same setting repeats it.
+    regenerated = False
+    caption_first = None
+    if is_echo(cleaned, story):
+        regenerated = True
+        caption_first = cleaned
+        progress(0, desc="caption echoed the story, retrying")
+        caption, _ = generate(
+            image, prompt + ECHO_RETRY, max_new_tokens=CAPTION_TOKENS,
+            temperature=1.0,
+        )
+        cleaned = clean_caption(caption)
+
+
     runlog.log(
         "generate",
         run_id=run_id,
@@ -93,6 +111,7 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
         vertical=vertical or None,
         description=description,
         query=query,
+        queries=queries,
         raw=[topic_row(t) for t in raw],
         gate_ids=[t.get("topic_id") for t in candidates],
         judge_verdict=verdict,
@@ -101,6 +120,8 @@ def generate_caption(image, story, vertical, voice, progress=gr.Progress()):
         prompt=prompt,
         caption_raw=caption,
         caption=cleaned,
+        regenerated=regenerated,
+        caption_first=caption_first,
         settings={"model": MODEL_ID, "temperature": 0.8,
                   "caption_tokens": CAPTION_TOKENS, **GATE_SETTINGS},
         timings={"describe": round(t_describe, 2), "retrieve": round(t_retrieve, 2),
