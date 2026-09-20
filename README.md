@@ -16,9 +16,10 @@ Needs an NVIDIA GPU with ~8 GB free. `vlm/model.py` hardcodes `device_map="cuda"
 so CPU-only torch fails at load.
 
 ```
-python -m venv venv && venv\Scripts\activate  #virtual env
+python -m venv venv
+venv\Scripts\activate
 pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128 #torch 5060 ti
-pip install -r requirements.txt #installs packages
+pip install -r requirements.txt
 
 echo UPRIVER_API_KEY=your_key_here > .env
 
